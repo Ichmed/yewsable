@@ -1,7 +1,14 @@
+#[cfg(feature = "async")]
+pub mod r#async;
+mod features;
 pub mod input;
 pub mod list_state;
 pub mod map_state;
+pub mod set_state;
 
+#[cfg(feature = "async")]
+pub use r#async::*;
+pub use features::*;
 pub use list_state::*;
 pub use map_state::*;
 
@@ -11,33 +18,6 @@ use gloo::{
 };
 use web_sys::{EventTarget, HtmlElement};
 use yew::{Callback, NodeRef, UseStateHandle, hook, use_callback, use_effect_with, use_node_ref};
-
-#[hook]
-pub fn use_async_callback<IN, F, D>(deps: D, f: F) -> Callback<IN, ()>
-where
-    IN: 'static,
-    F: AsyncFn(IN, &D) -> () + Clone + 'static,
-    D: PartialEq + Clone + 'static,
-{
-    use_callback(deps, move |input, deps| {
-        let b = deps.clone();
-        let f = f.clone();
-        wasm_bindgen_futures::spawn_local(Box::pin(async move { f(input, &b).await }));
-    })
-}
-
-#[hook]
-pub fn use_async_effect_with<F, D>(deps: D, f: F)
-where
-    F: AsyncFn(&D) -> () + Clone + 'static,
-    D: PartialEq + Clone + 'static,
-{
-    use_effect_with(deps, move |deps| {
-        let b = deps.clone();
-        let f = f;
-        wasm_bindgen_futures::spawn_local(Box::pin(async move { f(&b).await }));
-    });
-}
 
 #[hook]
 pub fn use_setter<T, IN>(state_handle: &UseStateHandle<T>, value: T) -> Callback<IN, ()>
@@ -94,7 +74,7 @@ pub fn use_focus() -> (NodeRef, Callback<()>) {
 /// ```
 /// let new = (*state).clone();
 /// // do something to new
-/// state.set(new)
+/// state.set(new);
 /// ```
 ///
 /// pattern.

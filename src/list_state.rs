@@ -1,6 +1,4 @@
-use std::ops::{Deref, DerefMut};
-
-use yew::{Callback, UseStateHandle, hook, use_state};
+use yew::{Callback, Html, UseStateHandle, hook, html, use_state};
 
 use crate::use_mutator;
 
@@ -11,13 +9,45 @@ pub struct ListState<L, T> {
     pub push: Callback<T>,
 }
 
-impl<L, T> ListState<L, T> {
+impl<L: VectorLike<T>, T> ListState<L, T> {
     pub fn push_default(&self) -> Callback<()>
     where
         T: Default + 'static,
     {
         self.push.reform(|()| T::default())
     }
+
+    /// Maps the data to a list of html elements and automatically keys them
+    ///
+    /// Identical to `.iter().map(|(k, v, c)| html!(<key={k.clone()}>{ f((v, c)) }</>))`
+    pub fn keyed_list<'a, F>(&'a self, f: F) -> impl Iterator<Item = Html>
+    where
+        F: Fn((&T, ListElementCallbacks<T>)) -> Html + 'a,
+        T: 'static,
+    {
+        self.iter()
+            .map(move |(k, v, c)| html!(<key={k}>{ f((v, c)) }</>))
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (usize, &T, ListElementCallbacks<T>)>
+    where
+        T: 'static,
+    {
+        self.state.iter().enumerate().map(move |(k, v)| {
+            let callbacks = ListElementCallbacks {
+                update: self.update.reform(move |x| (k, x)),
+                remove: self.delete.reform(move |()| k),
+                push: self.push.clone(),
+            };
+            (k, v, callbacks)
+        })
+    }
+}
+
+pub struct ListElementCallbacks<T> {
+    pub update: Callback<T>,
+    pub remove: Callback<()>,
+    pub push: Callback<T>,
 }
 
 pub trait VectorLike<T> {
@@ -25,52 +55,41 @@ pub trait VectorLike<T> {
     fn remove(&mut self, index: usize);
     fn push(&mut self, element: T);
     fn update(&mut self, index: usize, element: T);
+    fn iter(&self) -> impl Iterator<Item = &T>
+    where
+        T: 'static;
     fn len(&self) -> usize;
     fn is_empty(&self) -> bool {
         self.len() == 0
     }
 }
 
-impl<X, T> VectorLike<T> for X
+impl<T> VectorLike<T> for Vec<T>
 where
-    X: BackedByVec<T>,
+    T: 'static,
 {
     fn get(&self, index: usize) -> &T {
-        &self.as_backing_vec()[index]
+        &self[index]
     }
 
     fn remove(&mut self, index: usize) {
-        self.as_backing_vec_mut().remove(index);
+        self.remove(index);
     }
 
     fn push(&mut self, element: T) {
-        self.as_backing_vec_mut().push(element);
+        self.push(element);
     }
 
     fn update(&mut self, index: usize, element: T) {
-        self.as_backing_vec_mut()[index] = element;
+        self[index] = element;
+    }
+
+    fn iter(&self) -> impl Iterator<Item = &T> {
+        <[T]>::iter(self)
     }
 
     fn len(&self) -> usize {
-        self.as_backing_vec().len()
-    }
-}
-
-pub trait BackedByVec<T> {
-    fn as_backing_vec_mut(&mut self) -> &mut Vec<T>;
-    fn as_backing_vec(&self) -> &Vec<T>;
-}
-
-impl<L, T> BackedByVec<T> for L
-where
-    L: DerefMut + Deref<Target = Vec<T>>,
-{
-    fn as_backing_vec_mut(&mut self) -> &mut Vec<T> {
-        self
-    }
-
-    fn as_backing_vec(&self) -> &Vec<T> {
-        self
+        self.len()
     }
 }
 

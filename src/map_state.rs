@@ -3,11 +3,7 @@ use std::{
     hash::{BuildHasher, Hash},
 };
 
-use yew::{
-    AttrValue, Callback, Html, InputEvent, UseStateHandle, component, hook, html, use_state,
-    virtual_dom::Key,
-};
-use yew_autoprops::autoprops;
+use yew::{Callback, Html, UseStateHandle, hook, html, use_state, virtual_dom::Key};
 
 use crate::use_mutator;
 
@@ -28,29 +24,31 @@ where
     /// Identical to `.iter().map(|(k, v, c)| html!(<key={k.clone()}>{ f((k, v, c)) }</>))`
     pub fn keyed_list<'a, F>(&'a self, f: F) -> impl Iterator<Item = Html>
     where
-        F: Fn((&K, &V, MapElementCallbacks<V>)) -> Html + 'a,
+        F: Fn((&K, &V, MapElementCallbacks<K, V>)) -> Html + 'a,
         K: Into<Key>,
     {
         self.iter()
             .map(move |(k, v, c)| html!(<key={k.clone()}>{ f((k, v, c)) }</>))
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = (&K, &V, MapElementCallbacks<V>)> {
+    pub fn iter(&self) -> impl Iterator<Item = (&K, &V, MapElementCallbacks<K, V>)> {
         self.state.iter().map(move |(k, v)| {
             let update_key = k.clone();
             let delete_key = k.clone();
             let callbacks = MapElementCallbacks {
                 update: self.set.reform(move |x| (update_key.clone(), x)),
                 remove: self.delete.reform(move |()| delete_key.clone()),
+                insert: self.set.clone(),
             };
             (k, v, callbacks)
         })
     }
 }
 
-pub struct MapElementCallbacks<V> {
+pub struct MapElementCallbacks<K, V> {
     pub update: Callback<V>,
     pub remove: Callback<()>,
+    pub insert: Callback<(K, V)>,
 }
 
 pub trait MapLike<K, V> {
@@ -111,30 +109,4 @@ impl<K: Eq + Hash, V, B: BuildHasher> MapLike<K, V> for HashMap<K, V, B> {
     {
         self.iter()
     }
-}
-
-#[autoprops]
-#[component]
-fn Test() -> Html {
-    let x = use_map_state(HashMap::<AttrValue, AttrValue>::default);
-
-    x.iter()
-        .map(|(name, value, MapElementCallbacks { update, remove })| {
-            let oninput =
-                update.reform(|event: InputEvent| event.data().unwrap_or_default().into());
-            html!(
-                <div>
-                    <h1>{ name }</h1>
-                    <input value={value.clone()} {oninput} />
-                    <button onclick={remove.reform(|_| ())}>{ "X" }</button>
-                </div>
-            )
-        })
-        .collect()
-}
-
-#[cfg(test)]
-mod test {
-    #[test]
-    fn test() {}
 }
